@@ -1,0 +1,16 @@
+{
+  "id": "/",
+  "name": "AYPOST — Kasir",
+  "short_name": "AYPOST",
+  "description": "Aplikasi kasir modern untuk bisnis kuliner.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#111110",
+  "theme_color": "#111110",
+  "categories": ["business", "food"],
+  "icons": [
+    { "src": "/icons/aypost.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
