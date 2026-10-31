@@ -1,0 +1,9 @@
+{
+  "appId": "id.aypost.pos",
+  "appName": "AYPOST",
+  "webDir": "dist",
+  "bundledWebRuntime": false,
+  "server": {
+    "androidScheme": "https"
+  }
+}
