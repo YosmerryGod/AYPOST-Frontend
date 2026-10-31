@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Activity, ArrowDownUp, Bell, ChefHat, ChevronDown, CircleHelp, Clock3,
   CreditCard, Grid2X2, LayoutDashboard, LogOut, Minus, MoreHorizontal,
@@ -6,6 +6,7 @@ import {
   SlidersHorizontal, Sparkles, Tag, Trash2, TrendingUp, Utensils,
   Wallet, X, Check, Banknote, QrCode, ReceiptText, Menu, XCircle
 } from "lucide-react";
+import { createOrder, getProducts, loginWithPin, logout } from "./lib/api.js";
 
 const products = [
   { id: 1, name: "Ayam Panggang", category: "Makanan", price: 13000, image: "https://images.unsplash.com/photo-1598103442097-8b74394b95c6?w=700&q=85", tag: "Terlaris", desc: "Ayam panggang bumbu khas" },
@@ -42,12 +43,33 @@ function App() {
   const [tableNumber, setTableNumber] = useState("01");
   const [successOrder, setSuccessOrder] = useState(null);
   const [toast, setToast] = useState("");
+  const [isAuthenticated, setIsAuthenticated] = useState(Boolean(localStorage.getItem("aypost_token")));
+  const [loginPin, setLoginPin] = useState("");
+  const [loginError, setLoginError] = useState("");
+  const [apiProducts, setApiProducts] = useState([]);
+  const [apiReady, setApiReady] = useState(false);
+  const [apiError, setApiError] = useState("");
 
-  const filteredProducts = useMemo(() => products.filter((product) => {
+  useEffect(() => {
+    getProducts().then((result) => {
+      setApiProducts((result.data || []).map((product) => ({
+        id: Number(product.id), name: product.name, category: product.category || "Lainnya",
+        price: Number(product.price), image: product.image_url || "https://images.unsplash.com/photo-1547592180-85f173990554?w=700&q=80",
+        tag: "", desc: product.description || ""
+      })));
+      setApiReady(true);
+    }).catch((error) => {
+      setApiError(error.message);
+      setApiReady(true);
+    });
+  }, []);
+
+  const availableCategories = ["Semua", ...new Set(apiProducts.map((product) => product.category))];
+  const filteredProducts = useMemo(() => apiProducts.filter((product) => {
     const matchesCategory = category === "Semua" || product.category === category;
     const matchesSearch = product.name.toLowerCase().includes(search.toLowerCase());
     return matchesCategory && matchesSearch;
-  }), [category, search]);
+  }), [category, search, apiProducts]);
 
   const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const total = Math.max(0, subtotal - discount);
@@ -76,31 +98,42 @@ function App() {
       .filter((item) => item.quantity > 0));
   };
 
-  const completePayment = () => {
+  const completePayment = async () => {
     if (!cart.length) return;
+    if (!isAuthenticated) return notify("Login terlebih dahulu untuk menyimpan transaksi");
     if (paymentMethod === "Tunai" && received < total) {
       notify("Nominal uang diterima belum cukup");
       return;
     }
-    const order = {
-      number: "AY-" + Date.now().toString().slice(-6),
-      items: cart,
-      total,
-      subtotal,
-      discount,
-      method: paymentMethod,
-      change: paymentMethod === "Tunai" ? change : 0,
-      date: new Date().toLocaleString("id-ID")
-    };
-    setSuccessOrder(order);
-    setCart([]);
-    setDiscount(0);
-    setCashReceived("");
-    setPaymentOpen(false);
-    setMobileCartOpen(false);
+    try {
+      const result = await createOrder({
+        items: cart.map((item) => ({ id: item.id, name: item.name, price: item.price, quantity: item.quantity })),
+        subtotal, discount, total, cash_received: paymentMethod === "Tunai" ? received : 0,
+        payment_method: ({ Tunai: "cash", QRIS: "qris", Transfer: "transfer" })[paymentMethod] || "cash",
+        order_type: orderType === "Makan di tempat" ? "dine_in" : "takeaway",
+        table_number: tableNumber
+      });
+      const saved = result.data;
+      setSuccessOrder({
+        number: saved.order_number,
+        total: Number(saved.total),
+        method: paymentMethod,
+        change: paymentMethod === "Tunai" ? change : 0,
+        date: new Date(saved.created_at).toLocaleString("id-ID")
+      });
+      setCart([]);
+      setDiscount(0);
+      setCashReceived("");
+      setPaymentOpen(false);
+      setMobileCartOpen(false);
+    } catch (error) {
+      notify(error.message || "Transaksi gagal disimpan");
+    }
   };
 
   const openCheckout = () => {
+    if (!isAuthenticated) return notify("Login terlebih dahulu untuk melanjutkan");
+    if (!apiReady || apiError) return notify("Koneksi database belum siap");
     if (!cart.length) return notify("Tambahkan produk terlebih dahulu");
     setPaymentOpen(true);
     setCashReceived("");
@@ -186,14 +219,16 @@ function App() {
                 <div className="stat-card"><div className="stat-icon purple"><Activity size={17} /></div><div><span>Rata-rata transaksi</span><strong>Rp 26.750</strong><small>Per pesanan</small></div></div>
               </div>
               <div className="catalog-heading"><div><span className="eyebrow">KATALOG MENU</span><h2>Pilih menu favorit</h2></div><button className="filter-button" onClick={() => notify("Semua menu sedang ditampilkan")}><SlidersHorizontal size={16} /> Filter</button></div>
-              <div className="catalog-toolbar"><div className="category-tabs">{categories.map((item) => <button key={item} className={category === item ? "category-tab active" : "category-tab"} onClick={() => setCategory(item)}>{item}</button>)}</div><label className="search-box"><Search size={17} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Cari nama menu..." /><kbd>⌘ K</kbd></label></div>
+              <div className="catalog-toolbar"><div className="category-tabs">{availableCategories.map((item) => <button key={item} className={category === item ? "category-tab active" : "category-tab"} onClick={() => setCategory(item)}>{item}</button>)}</div><label className="search-box"><Search size={17} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Cari nama menu..." /><kbd>⌘ K</kbd></label></div>
+              {apiError && <div className="api-warning"><XCircle size={16} /> Katalog belum terhubung ke server: {apiError}</div>}
+              {!apiReady && <div className="api-loading">Menghubungkan katalog ke database...</div>}
               <div className="product-grid">
                 {filteredProducts.map((product) => <button className="product-card" key={product.id} onClick={() => addToCart(product)}>
                   <div className="product-image-wrap"><img src={product.image} alt={product.name} loading="lazy" />{product.tag && <span className="product-tag">{product.tag}</span>}<span className="add-product"><Plus size={17} /></span></div>
                   <div className="product-details"><div><strong>{product.name}</strong><span>{product.desc}</span></div><b>{money(product.price)}</b></div>
                 </button>)}
               </div>
-              {!filteredProducts.length && <div className="no-results"><Search size={25} /><strong>Menu tidak ditemukan</strong><span>Coba kata kunci atau kategori lain.</span></div>}
+              {apiReady && !apiError && !filteredProducts.length && <div className="no-results"><Search size={25} /><strong>Menu tidak ditemukan</strong><span>Coba kata kunci atau kategori lain.</span></div>}
               <div className="catalog-footnote"><ChefHat size={15} /> Menu diperbarui secara otomatis oleh outlet <span>•</span> {filteredProducts.length} produk</div>
             </section>
             <aside className="cart-panel"><CartContent /></aside>
@@ -221,6 +256,27 @@ function App() {
       </div></div>}
 
       {successOrder && <div className="modal-backdrop" onClick={() => setSuccessOrder(null)}><div className="success-modal" onClick={(event) => event.stopPropagation()}><div className="success-mark"><Check size={30} /></div><span className="eyebrow">TRANSAKSI BERHASIL</span><h2>Pembayaran diterima!</h2><p>Pesanan berhasil diselesaikan.</p><div className="receipt-card"><div><span>Nomor transaksi</span><strong>{successOrder.number}</strong></div><div><span>Waktu</span><strong>{successOrder.date}</strong></div><div><span>Metode pembayaran</span><strong>{successOrder.method}</strong></div><div className="receipt-total"><span>Total dibayar</span><strong>{money(successOrder.total)}</strong></div>{successOrder.change > 0 && <div><span>Kembalian</span><strong>{money(successOrder.change)}</strong></div>}</div><button className="confirm-payment" onClick={() => { setSuccessOrder(null); notify("Transaksi selesai"); }}><Printer size={17} /> Selesai</button><button className="text-button" onClick={() => setSuccessOrder(null)}>Tutup ringkasan</button></div></div>}
+      {!isAuthenticated && <div className="modal-backdrop auth-backdrop"><form className="auth-modal" onSubmit={async (event) => {
+        event.preventDefault();
+        setLoginError("");
+        try {
+          await loginWithPin(loginPin);
+          setIsAuthenticated(true);
+          setLoginPin("");
+        } catch (error) {
+          setLoginError(error.message || "Login gagal.");
+        }
+      }}>
+        <div className="brand auth-brand"><div className="brand-mark"><Utensils size={19} /></div><span>AY<span>POST</span></span></div>
+        <span className="eyebrow">SELAMAT DATANG KEMBALI</span>
+        <h2>Login kasir</h2>
+        <p>Masukkan PIN administrator untuk membuka workspace AYPOST.</p>
+        <label htmlFor="admin-pin">PIN administrator</label>
+        <input id="admin-pin" type="password" inputMode="numeric" autoComplete="current-password" value={loginPin} onChange={(event) => setLoginPin(event.target.value)} placeholder="Masukkan PIN" required />
+        {loginError && <div className="login-error">{loginError}</div>}
+        <button className="confirm-payment" type="submit">Masuk ke AYPOST <span>→</span></button>
+        <small>PIN diatur melalui environment variable AYPOST_ADMIN_PIN di Vercel.</small>
+      </form></div>}
       {toast && <div className="toast"><Check size={16} /> {toast}</div>}
     </div>
   );
