@@ -268,3 +268,91 @@ npm run preview
 ```
 
 > **Catatan integrasi:** katalog, nominal penjualan, dan checkout saat ini menggunakan data demo di frontend. Belum ada koneksi backend, penyimpanan transaksi permanen, printer fisik, atau integrasi QRIS/payment gateway. Hubungkan ke API sebelum digunakan untuk transaksi operasional.
+
+
+---
+
+## 12. PostgreSQL, Vercel, PWA, dan APK
+
+### Arsitektur
+
+- Frontend React + Vite di Vercel.
+- API serverless di folder `api/`.
+- Neon PostgreSQL sebagai database permanen.
+- PWA melalui `public/manifest.webmanifest` dan `public/sw.js`.
+- Capacitor untuk membungkus build web menjadi aplikasi Android.
+
+### Setup database Neon
+
+1. Buat project PostgreSQL di [Neon](https://neon.tech/).
+2. Buka SQL Editor di Neon.
+3. Jalankan seluruh isi file `db/schema.sql`.
+4. Salin connection string PostgreSQL dari Neon.
+
+### Environment variables di Vercel
+
+Tambahkan pada Project Settings → Environment Variables:
+
+| Variable | Keterangan |
+|---|---|
+| `DATABASE_URL` | Connection string Neon PostgreSQL |
+| `AYPOST_ADMIN_PIN` | PIN administrator untuk login |
+| `AYPOST_JWT_SECRET` | Secret acak minimal 32 karakter |
+
+Jangan pernah menggunakan awalan `VITE_` pada secret database atau JWT. Nilai tersebut hanya boleh tersedia di server.
+
+### Deploy Vercel
+
+1. Import repository `YosmerryGod/AYPOST-Frontend` ke Vercel.
+2. Framework preset: Vite.
+3. Build command: `npm run build`.
+4. Output directory: `dist`.
+5. Masukkan environment variables di atas.
+6. Deploy ulang setelah konfigurasi environment selesai.
+
+Tes API setelah deployment:
+
+- `https://DOMAIN-AYPOST/api/health`
+- `https://DOMAIN-AYPOST/api/products`
+
+### Login awal
+
+Login awal memakai PIN dari `AYPOST_ADMIN_PIN`. API mengeluarkan token sesi bertanda tangan dengan masa berlaku 12 jam. Ganti PIN dan JWT secret sebelum aplikasi dipakai.
+
+### Membuat APK Android
+
+Workflow GitHub Actions tersedia di `.github/workflows/android-apk.yml`.
+
+1. Tambahkan GitHub Actions repository variable `VITE_API_BASE_URL` dengan URL Vercel, misalnya `https://aypost.vercel.app`.
+2. Buka tab Actions.
+3. Jalankan workflow **Build AYPOST Android APK** dengan tombol Run workflow.
+4. Setelah selesai, unduh artifact `AYPOST-Android-debug`.
+5. File APK berada di dalam artifact dengan nama `app-debug.apk`.
+
+Untuk build lokal:
+
+```bash
+npm install
+npm run build
+npx cap add android
+npx cap sync android
+npx cap open android
+```
+
+### Status integrasi
+
+- [x] Neon PostgreSQL serverless client
+- [x] Skema kategori, produk, pengguna, transaksi, dan item transaksi
+- [x] API health check
+- [x] API katalog produk dan kategori
+- [x] Login PIN administrator dan token API
+- [x] API simpan dan baca transaksi
+- [x] API ringkasan dashboard
+- [x] PWA manifest dan service worker
+- [x] Konfigurasi Capacitor
+- [x] Workflow build APK debug
+- [ ] Neon project dan database belum dibuat/diisi oleh pemilik akun
+- [ ] Environment variables Vercel belum diisi
+- [ ] Deployment Vercel dan build APK perlu dijalankan dari akun pemilik
+
+> Catatan: API transaksi dan katalog telah disiapkan. Sebelum dipakai secara operasional, lengkapi pengelolaan pengguna/kasir, audit keamanan, validasi stok, serta uji transaksi dan perangkat printer. Build debug APK bukan APK release bertanda tangan untuk distribusi Play Store.
