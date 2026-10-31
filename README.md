@@ -233,3 +233,38 @@ Gaya visual mengikuti gambar referensi yang diberikan: **dark food photography, 
 ---
 
 **Status:** Design blueprint — tahap persetujuan arah UI sebelum implementasi komponen.
+
+
+---
+
+## 11. Implementasi Frontend
+
+Tahap pertama frontend sudah tersedia di branch `main`.
+
+### Yang sudah dibuat
+- App shell desktop dengan sidebar dan header.
+- Katalog produk dengan pencarian dan filter kategori.
+- Kartu produk dengan foto, harga, dan tombol tambah.
+- Keranjang interaktif dengan tambah/kurangi jumlah item.
+- Pilihan dine-in / take away dan nomor meja.
+- Diskon demo 5%.
+- Modal checkout: Tunai, QRIS, dan Transfer.
+- Hitung uang diterima dan kembalian.
+- Ringkasan transaksi berhasil.
+- Layout mobile dengan bottom navigation dan cart sheet.
+
+### Menjalankan secara lokal
+
+```bash
+npm install
+npm run dev
+```
+
+### Build production
+
+```bash
+npm run build
+npm run preview
+```
+
+> **Catatan integrasi:** katalog, nominal penjualan, dan checkout saat ini menggunakan data demo di frontend. Belum ada koneksi backend, penyimpanan transaksi permanen, printer fisik, atau integrasi QRIS/payment gateway. Hubungkan ke API sebelum digunakan untuk transaksi operasional.
